@@ -1142,7 +1142,7 @@ function renderQuestion() {
             ${questionContent}
     `;
 
-if (item.a && Array.isArray(item.a)) {
+    if (item.a && Array.isArray(item.a)) {
         const isMultiple = Array.isArray(item.correct) && item.correct.length > 1;
         const inputType = isMultiple ? 'checkbox' : 'radio';
         
@@ -1170,8 +1170,28 @@ if (item.a && Array.isArray(item.a)) {
             `;
         });
         html += `</ul>`;
+    } else {
+        const textVal = savedAnswer !== null ? savedAnswer : '';
+        html += `
+            <div style="margin-top: 15px;">
+                <input type="text" id="userAnswerInput" value="${textVal}" placeholder="Введите ваш ответ..." style="width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;" oninput="saveInputAnswer(this.value)">
+            </div>
+        `;
     }
-    
+
+    html += `
+            <button class="nav-btn" style="background-color: #f39c12; margin-top: 15px;" onclick="toggleHint()">Показать подсказку</button>
+            <div id="hintBox" class="hint" style="display:none; margin-top:10px;">${item.hint}</div>
+        </div>
+        <div class="nav-buttons">
+            <button class="nav-btn" ${currentIndex === 0 ? 'style="visibility:hidden"' : ''} onclick="prevQuestion()">Назад</button>
+            <button class="nav-btn" onclick="nextQuestion()">${currentIndex === testArray.length - 1 ? 'Завершить тест' : 'Далее'}</button>
+        </div>
+    `;
+
+    app.innerHTML = html;
+}
+
 function selectOption(idx, isMultiple) {
     if (isMultiple) {
         if (!Array.isArray(userAnswersState[currentIndex])) {
@@ -1206,7 +1226,11 @@ function nextQuestion() {
         userAnswersState[currentIndex] = inputField.value;
     }
 
-    if (userAnswersState[currentIndex] === null || userAnswersState[currentIndex] === '') {
+    const currentAns = userAnswersState[currentIndex];
+    
+    // Проверка на то, что пользователь что-то выбрал/ввел
+    const isEmptyArray = Array.isArray(currentAns) && currentAns.length === 0;
+    if (currentAns === null || currentAns === '' || isEmptyArray) {
         alert('Пожалуйста, ответьте на вопрос!');
         return;
     }
@@ -1235,7 +1259,6 @@ function renderResults() {
             if (Array.isArray(correctAns)) {
                 // Проверка для множественного выбора (массивы)
                 if (Array.isArray(userAns)) {
-                    // Сравниваем два массива независимо от порядка элементов
                     const userSorted = [...userAns].sort();
                     const correctSorted = [...correctAns].sort();
                     if (JSON.stringify(userSorted) === JSON.stringify(correctSorted)) {
