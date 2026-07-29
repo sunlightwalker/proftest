@@ -1106,12 +1106,14 @@
                  ]
     };
 
-let userAnswersState = []; // Универсальный массив для сохранения ответов (и индексов, и текста)
+let userAnswersState = []; // Универсальный массив для сохранения ответов
+let isShowingAnswerFeedback = false; // Флаг, показывающий, что мы замерли на экране с проверкой ответа
 
 function startTest(testKey) {
     currentTestKey = testKey;
     currentIndex = 0;
     score = 0;
+    isShowingAnswerFeedback = false;
     userAnswersState = new Array(testsData[testKey].length).fill(null);
     renderQuestion();
 }
@@ -1128,7 +1130,6 @@ function renderQuestion() {
     const item = testArray[currentIndex];
     const savedAnswer = userAnswersState[currentIndex];
 
-    // Определяем, выводить текст вопроса или картинку
     let questionContent = '';
     if (item.img) {
         questionContent = `<img src="${item.img}" alt="Вопрос с иллюстрацией" class="question-image">`;
@@ -1149,8 +1150,9 @@ function renderQuestion() {
         html += `<ul class="options">`;
         item.a.forEach((opt, idx) => {
             let checked = '';
+            let styleOption = '';
+
             if (isMultiple) {
-                // Если это массив, проверяем, есть ли текущий индекс в сохраненном массиве ответов пользователя
                 if (Array.isArray(savedAnswer) && savedAnswer.includes(idx)) {
                     checked = 'checked';
                 }
@@ -1160,10 +1162,24 @@ function renderQuestion() {
                 }
             }
 
+            // Если включен режим показа правильного ответа (после нажатия "Далее")
+            if (isShowingAnswerFeedback) {
+                const correctArr = Array.isArray(item.correct) ? item.correct : [item.correct];
+                const userArr = Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer];
+
+                if (correctArr.includes(idx)) {
+                    // Зеленый цвет для правильных вариантов
+                    styleOption = 'background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;';
+                } else if (userArr.includes(idx)) {
+                    // Красный цвет для того, что выбрал пользователь, но оно неверное
+                    styleOption = 'background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;';
+                }
+            }
+
             html += `
                 <li>
-                    <label>
-                        <input type="${inputType}" name="question" value="${idx}" ${checked} onclick="selectOption(${idx}, ${isMultiple})"> 
+                    <label style="display: block; padding: 8px 12px; border-radius: 6px; ${styleOption}">
+                        <input type="${inputType}" name="question" value="${idx}" ${checked} ${isShowingAnswerFeedback ? 'disabled' : ''} onclick="selectOption(${idx}, ${isMultiple})"> 
                         ${opt}
                     </label>
                 </li>
@@ -1172,11 +1188,45 @@ function renderQuestion() {
         html += `</ul>`;
     } else {
         const textVal = savedAnswer !== null ? savedAnswer : '';
+        let textStyle = '';
+        if (isShowingAnswerFeedback) {
+            const cleanUser = String(savedAnswer).trim().toLowerCase();
+            const cleanCorrect = String(item.answerText).trim().toLowerCase();
+            if (cleanUser === cleanCorrect) {
+                textStyle = 'background-color: #d4edda; border: 1px solid #c3e6cb;';
+            } else {
+                textStyle = 'background-color: #f8d7da; border: 1px solid #f5c6cb;';
+            }
+        }
+
         html += `
             <div style="margin-top: 15px;">
-                <input type="text" id="userAnswerInput" value="${textVal}" placeholder="Введите ваш ответ..." style="width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;" oninput="saveInputAnswer(this.value)">
+                <input type="text" id="userAnswerInput" value="${textVal}" placeholder="Введите ваш ответ..." ${isShowingAnswerFeedback ? 'disabled' : ''} style="width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; ${textStyle}" oninput="saveInputAnswer(this.value)">
             </div>
         `;
+    }
+
+    // Блок для вывода статуса ответа (Правильно / Неправильно) прямо под вопросом
+    if (isShowingAnswerFeedback) {
+        let isCurrentCorrect = false;
+        if (item.a) {
+            const correctArr = Array.isArray(item.correct) ? item.correct : [item.correct];
+            const userArr = Array.isArray(savedAnswer) ? savedAnswer : [savedAnswer];
+            const userSorted = [...userArr].sort();
+            const correctSorted = [...correctArr].sort();
+            if (JSON.stringify(userSorted) === JSON.stringify(correctSorted)) {
+                isCurrentCorrect = true;
+            }
+        } else if (item.answerText) {
+            if (String(savedAnswer).trim().toLowerCase() === String(item.answerText).trim().toLowerCase()) {
+                isCurrentCorrect = true;
+            }
+        }
+
+        const alertStyle = isCurrentCorrect ? 'background-color: #d4edda; color: #155724;' : 'background-color: #f8d7da; color: #721c24;';
+        const alertText = isCurrentCorrect ? '✅ Верно!' : '❌ Неверно! Правильные ответы отмечены зеленым.';
+        
+        html += `<div style="margin-top: 15px; padding: 10px; border-radius: 6px; font-weight: bold; ${alertStyle}">${alertText}</div>`;
     }
 
     html += `
@@ -1184,8 +1234,8 @@ function renderQuestion() {
             <div id="hintBox" class="hint" style="display:none; margin-top:10px;">${item.hint}</div>
         </div>
         <div class="nav-buttons">
-            <button class="nav-btn" ${currentIndex === 0 ? 'style="visibility:hidden"' : ''} onclick="prevQuestion()">Назад</button>
-            <button class="nav-btn" onclick="nextQuestion()">${currentIndex === testArray.length - 1 ? 'Завершить тест' : 'Далее'}</button>
+            <button class="nav-btn" ${currentIndex === 0 || isShowingAnswerFeedback ? 'style="visibility:hidden"' : ''} onclick="prevQuestion()">Назад</button>
+            <button class="nav-btn" onclick="nextQuestion()">${isShowingAnswerFeedback ? 'Далее' : 'Ответить'}</button>
         </div>
     `;
 
@@ -1193,6 +1243,7 @@ function renderQuestion() {
 }
 
 function selectOption(idx, isMultiple) {
+    if (isShowingAnswerFeedback) return; // Запрещаем менять выбор, когда идет показ правильного ответа
     if (isMultiple) {
         if (!Array.isArray(userAnswersState[currentIndex])) {
             userAnswersState[currentIndex] = [];
@@ -1201,9 +1252,9 @@ function selectOption(idx, isMultiple) {
         const position = currentSelected.indexOf(idx);
         
         if (position > -1) {
-            currentSelected.splice(position, 1); // Убираем, если уже был выбран
+            currentSelected.splice(position, 1);
         } else {
-            currentSelected.push(idx); // Добавляем, если кликнули
+            currentSelected.push(idx);
         }
     } else {
         userAnswersState[currentIndex] = idx;
@@ -1211,7 +1262,9 @@ function selectOption(idx, isMultiple) {
 }
 
 function saveInputAnswer(val) {
-    userAnswersState[currentIndex] = val;
+    if (!isShowingAnswerFeedback) {
+        userAnswersState[currentIndex] = val;
+    }
 }
 
 function toggleHint() {
@@ -1220,27 +1273,56 @@ function toggleHint() {
 }
 
 function nextQuestion() {
-    // Если это текстовое поле, подстрахуемся и сохраним значение при клике "Далее"
+    const item = testsData[currentTestKey][currentIndex];
+    
+    // Если это текстовое поле, подстрахуемся
     const inputField = document.getElementById('userAnswerInput');
-    if (inputField) {
+    if (inputField && !isShowingAnswerFeedback) {
         userAnswersState[currentIndex] = inputField.value;
     }
 
     const currentAns = userAnswersState[currentIndex];
-    
-    // Проверка на то, что пользователь что-то выбрал/ввел
     const isEmptyArray = Array.isArray(currentAns) && currentAns.length === 0;
+    
     if (currentAns === null || currentAns === '' || isEmptyArray) {
         alert('Пожалуйста, ответьте на вопрос!');
         return;
     }
 
+    // Если мы еще НЕ показывали фидбек — показываем его (подсвечиваем ошибки/правильные ответы)
+    if (!isShowingAnswerFeedback) {
+        isShowingAnswerFeedback = true;
+        
+        // Засчитываем балл сразу (если нужно для итогового экрана)
+        if (item.a) {
+            const correctAns = item.correct;
+            if (Array.isArray(correctAns)) {
+                if (Array.isArray(currentAns)) {
+                    const userSorted = [...currentAns].sort();
+                    const correctSorted = [...correctAns].sort();
+                    if (JSON.stringify(userSorted) === JSON.stringify(correctSorted)) {
+                        // Помечаем в уме, что отвечено верно (баллы можно собрать в конце)
+                    }
+                }
+            } else {
+                if (currentAns === correctAns) {
+                    // Верно
+                }
+            }
+        }
+        
+        renderQuestion(); // Перерисовываем экран с подсветкой цветом и сменой кнопки на "Далее"
+        return;
+    }
+
+    // Если фидбек уже был показан, то при повторном клике переходим к следующему вопросу
+    isShowingAnswerFeedback = false;
     currentIndex++;
     renderQuestion();
 }
 
 function prevQuestion() {
-    if (currentIndex > 0) {
+    if (currentIndex > 0 && !isShowingAnswerFeedback) {
         currentIndex--;
         renderQuestion();
     }
@@ -1250,14 +1332,12 @@ function renderResults() {
     const testArray = testsData[currentTestKey];
     score = 0;
 
+    // Подсчет итоговых баллов
     userAnswersState.forEach((userAns, idx) => {
         const item = testArray[idx];
-        
         if (item.a) {
             const correctAns = item.correct;
-            
             if (Array.isArray(correctAns)) {
-                // Проверка для множественного выбора (массивы)
                 if (Array.isArray(userAns)) {
                     const userSorted = [...userAns].sort();
                     const correctSorted = [...correctAns].sort();
@@ -1266,7 +1346,6 @@ function renderResults() {
                     }
                 }
             } else {
-                // Проверка для одиночного выбора
                 if (userAns === correctAns) {
                     score++;
                 }
